@@ -10,19 +10,19 @@ st.set_page_config(page_title="SPK Risiko Diabetes - KNN", page_icon="🩺", lay
 
 FILE_DATA = "dataset.csv"
 FITUR = ["Usia", "BMI", "Glukosa", "Tekanan Darah", "Riwayat Keluarga"]
-KOLOM = ["Pasien", "Jenis Kelamin"] + FITUR + ["Kelas"]
+KOLOM = ["Pasien"] + FITUR + ["Kelas"]
 
 DATA_AWAL = [
-    ["P01", "-", 25, 21.5, 90, 110, 0, 0],
-    ["P02", "-", 30, 23.1, 95, 115, 0, 0],
-    ["P03", "-", 35, 25.0, 105, 120, 0, 0],
-    ["P04", "-", 40, 27.5, 120, 125, 1, 1],
-    ["P05", "-", 45, 30.2, 140, 135, 1, 1],
-    ["P06", "-", 50, 31.5, 155, 140, 1, 1],
-    ["P07", "-", 55, 33.0, 165, 145, 1, 1],
-    ["P08", "-", 28, 22.5, 92, 112, 0, 0],
-    ["P09", "-", 38, 26.8, 115, 122, 0, 0],
-    ["P10", "-", 48, 29.5, 145, 130, 1, 1],
+    ["P01", 25, 21.5, 90, 110, 0, 0],
+    ["P02", 30, 23.1, 95, 115, 0, 0],
+    ["P03", 35, 25.0, 105, 120, 0, 0],
+    ["P04", 40, 27.5, 120, 125, 1, 1],
+    ["P05", 45, 30.2, 140, 135, 1, 1],
+    ["P06", 50, 31.5, 155, 140, 1, 1],
+    ["P07", 55, 33.0, 165, 145, 1, 1],
+    ["P08", 28, 22.5, 92, 112, 0, 0],
+    ["P09", 38, 26.8, 115, 122, 0, 0],
+    ["P10", 48, 29.5, 145, 130, 1, 1],
 ]
 
 LABEL = {0: "Risiko Rendah", 1: "Risiko Tinggi"}
@@ -89,7 +89,11 @@ st.markdown(
 def muat_data():
     if not os.path.exists(FILE_DATA):
         pd.DataFrame(DATA_AWAL, columns=KOLOM).to_csv(FILE_DATA, index=False)
-    return pd.read_csv(FILE_DATA)
+    data = pd.read_csv(FILE_DATA)
+    if list(data.columns) != KOLOM:  # buang kolom lama (mis. Jenis Kelamin)
+        data = data[KOLOM]
+        simpan_data(data)
+    return data
 
 
 def simpan_data(df):
@@ -151,9 +155,7 @@ tab1, tab2 = st.tabs(["🔍 Prediksi Pasien", "📋 Dataset"])
 with tab1:
     st.markdown("### Input Data Pasien")
     with st.form("form_prediksi"):
-        c1, c2 = st.columns(2)
-        nama = c1.text_input("Nama Pasien", placeholder="Contoh: Budi")
-        jk = c2.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
+        nama = st.text_input("Nama Pasien", placeholder="Contoh: Budi")
 
         c3, c4, c5 = st.columns(3)
         usia = c3.number_input("Usia (tahun)", min_value=1, max_value=120, value=42, step=1)
@@ -175,7 +177,7 @@ with tab1:
             rwy = 1 if riwayat.startswith("Ada") else 0
             x_baru = [usia, bmi, glukosa, tensi, rwy]
             st.session_state["hasil"] = {
-                "nama": nama.strip(), "jk": jk, "x": x_baru, "k": k,
+                "nama": nama.strip(), "x": x_baru, "k": k,
                 "knn": hitung_knn(df, x_baru, k),
             }
 
@@ -189,7 +191,7 @@ with tab1:
 
         st.markdown('<div class="step">Langkah 1 — Data Pasien Baru</div>', unsafe_allow_html=True)
         st.dataframe(
-            pd.DataFrame([[r["nama"], r["jk"]] + r["x"]], columns=["Nama", "Jenis Kelamin"] + FITUR),
+            pd.DataFrame([[r["nama"]] + r["x"]], columns=["Nama"] + FITUR),
             hide_index=True, use_container_width=True,
         )
         st.caption(f"Nilai K yang digunakan: **{k_pakai}**")
@@ -234,7 +236,7 @@ with tab1:
             f"""
             <div class="{kelas_css}">
               <h2>{ikon} {LABEL[pred]}</h2>
-              Pasien <b>{r['nama']}</b> ({r['jk']}, usia {r['x'][0]} tahun) diprediksi
+              Pasien <b>{r['nama']}</b> (usia {r['x'][0]} tahun) diprediksi
               memiliki <b>{LABEL[pred]}</b> diabetes berdasarkan {k_pakai} tetangga terdekat
               ({knn['n0']} suara Rendah, {knn['n1']} suara Tinggi).<br><br>
               <i>{saran}</i>
@@ -246,7 +248,7 @@ with tab1:
         st.write("")
         if st.button("➕ Simpan pasien ini ke dataset"):
             baris = pd.DataFrame(
-                [[id_berikutnya(df), r["jk"]] + r["x"] + [pred]], columns=KOLOM
+                [[id_berikutnya(df)] + r["x"] + [pred]], columns=KOLOM
             )
             simpan_data(pd.concat([df, baris], ignore_index=True))
             del st.session_state["hasil"]
@@ -263,10 +265,9 @@ with tab2:
 
     st.markdown("### ➕ Tambah Data Baru")
     with st.form("form_tambah", clear_on_submit=True):
-        a1, a2, a3 = st.columns(3)
+        a1, a2 = st.columns(2)
         t_nama = a1.text_input("ID / Nama Pasien", value=id_berikutnya(df))
-        t_jk = a2.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"], key="t_jk")
-        t_kelas = a3.selectbox("Kelas", ["Risiko Rendah (0)", "Risiko Tinggi (1)"])
+        t_kelas = a2.selectbox("Kelas", ["Risiko Rendah (0)", "Risiko Tinggi (1)"])
 
         b1, b2, b3, b4, b5 = st.columns(5)
         t_usia = b1.number_input("Usia", 1, 120, 30)
@@ -278,7 +279,7 @@ with tab2:
         if st.form_submit_button("Simpan ke Dataset"):
             baris = pd.DataFrame(
                 [[
-                    t_nama.strip() or id_berikutnya(df), t_jk,
+                    t_nama.strip() or id_berikutnya(df),
                     t_usia, t_bmi, t_glu, t_tensi,
                     1 if t_rwy.startswith("Ada") else 0,
                     1 if t_kelas.endswith("(1)") else 0,
@@ -300,5 +301,3 @@ with tab2:
         pd.DataFrame(DATA_AWAL, columns=KOLOM).to_csv(FILE_DATA, index=False)
         st.session_state.pop("hasil", None)
         st.rerun()
-
-st.caption("Catatan: Jenis kelamin dicatat sebagai identitas pasien, tidak ikut dihitung dalam jarak KNN karena tidak ada di dataset awal.")
